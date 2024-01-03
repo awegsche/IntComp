@@ -5,25 +5,28 @@
 #ifndef EDITOR_H
 #define EDITOR_H
 
+#include "core/ColorPalette.h"
 #include <QMainWindow>
 
 
 QT_BEGIN_NAMESPACE
-namespace Ui { class Editor; }
+namespace Ui {
+class Editor;
+}
 QT_END_NAMESPACE
 
-class Editor : public QMainWindow {
-Q_OBJECT
+class Editor : public QMainWindow
+{
+    Q_OBJECT
 
-public:
+  public:
     explicit Editor(QWidget *parent = nullptr);
     ~Editor() override;
 
 
-
-
-private:
+  private:
     Ui::Editor *ui;
+    ColorPalette m_palette;
 
     void input_text();
     void compile();
@@ -31,4 +34,4 @@ private:
 };
 
 
-#endif //EDITOR_H
+#endif// EDITOR_H

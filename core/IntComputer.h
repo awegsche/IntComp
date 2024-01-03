@@ -5,20 +5,21 @@
 #ifndef INTCOMPUTER_H
 #define INTCOMPUTER_H
 
-
-#include <charconv>
-#include <vector>
-#include <string>
 #include <array>
-#include <stdexcept>
+#include <charconv>
 #include <format>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+#include "ColorPalette.h"
 
 using CodeType = int64_t;
 
+class IntComputer
+{
 
-class IntComputer {
-
-public:
+  public:
     enum OpCode {
         ADD = 1,
         MUL,
@@ -39,7 +40,8 @@ public:
         ATEND,
     };
 
-    IntComputer(std::string const &code) {
+    IntComputer(std::string const &code)
+    {
         auto pos = code.begin();
 
         while (true) {
@@ -51,17 +53,15 @@ public:
 
             m_opcodes.push_back(value);
 
-            if (until == code.end())
-                break;
+            if (until == code.end()) break;
             pos = until + 1;
         }
     }
 
-    auto opcodes() const -> std::vector<CodeType> const & {
-        return m_opcodes;
-    }
+    auto opcodes() const -> std::vector<CodeType> const & { return m_opcodes; }
 
-    auto get_opcode() {
+    auto get_opcode()
+    {
         CodeType c = m_opcodes[position];
 
         codes[0] = c % 100;
@@ -72,34 +72,34 @@ public:
         }
     }
 
-    auto write_addr(uint8_t offset) const -> std::string {
-        return std::format("@{}", m_opcodes[position + offset]);
-    }
+    auto write_addr(uint8_t offset) const -> std::string { return std::format("@{}", m_opcodes[position + offset]); }
 
-    auto write_value(uint8_t offset) const -> std::string {
+    auto write_value(uint8_t offset) const -> std::string
+    {
         switch (codes[offset]) {
-        case 0: // position
+        case 0:// position
             return std::format("@{}", m_opcodes[position + offset]);
-        case 1: // immediate
-            return std::format("<font color=\"yellow\">{}</font>",
-                               m_opcodes[position + offset]);
+        case 1:// immediate
+            return std::format("<font color=\"yellow\">{}</font>", m_opcodes[position + offset]);
         default:
             throw std::runtime_error("unknown mode");
         }
     }
 
-    auto get_value(uint8_t offset) -> CodeType & {
+    auto get_value(uint8_t offset) -> CodeType &
+    {
         switch (codes[offset]) {
-        case 0: // position
+        case 0:// position
             return m_opcodes[m_opcodes[position + offset]];
-        case 1: // immediate
+        case 1:// immediate
             return m_opcodes[position + offset];
         default:
             throw std::runtime_error("unknown mode");
         }
     }
 
-    auto run() {
+    auto run()
+    {
         m_state = RUN;
 
         do {
@@ -107,16 +107,16 @@ public:
         } while (m_state == RUN);
     }
 
-    auto print() -> std::string {
-        auto const start       = position;
+    auto print() -> std::string
+    {
+        auto const start = position;
         auto const start_state = m_state;
 
         std::string formatted_string{};
         while (m_state != ATEND && position < m_opcodes.size()) {
             if (position == start) {
                 formatted_string += "<span style = \"background-color:#202040\">";
-            }
-            else {
+            } else {
                 formatted_string += "<span>";
             }
             formatted_string += print_step();
@@ -125,23 +125,22 @@ public:
         while (position < m_opcodes.size()) {
             codes[0] = 1;
             // here is probably garbage, set to immediate to just print the value
-            formatted_string += std::format(
-                "<font color=\"#808080\">{:03d} | </font>", position);
+            formatted_string += std::format("<font color=\"#808080\">{:03d} | </font>", position);
             formatted_string += std::format("{}<br/>", get_value(0));
             position += 1;
         }
         position = start;
-        m_state  = start_state;
+        m_state = start_state;
         return formatted_string;
     }
 
-    auto print_step() -> std::string {
+    auto print_step() -> std::string
+    {
         std::string formatted_code;
 
         get_opcode();
 
-        formatted_code += std::format("<font color=\"#808080\">{:03} | </font>",
-                                      position);
+        formatted_code += std::format("<font color=\"#808080\">{:03} | </font>", position);
 
         switch (codes[0]) {
         case ADD:
@@ -188,8 +187,8 @@ public:
             formatted_code += " " + write_value(1);
             formatted_code += " < " + write_value(2);
             formatted_code += " -> " + write_addr(3);
-        //position = get_value(1) == 0 ? get_value(2) : position + 3;
-        //m_opcodes[position + 3] = get_value(1) < get_value(2) ? 1 : 0;
+            // position = get_value(1) == 0 ? get_value(2) : position + 3;
+            // m_opcodes[position + 3] = get_value(1) < get_value(2) ? 1 : 0;
             position += 4;
             break;
         case EQU:
@@ -197,7 +196,7 @@ public:
             formatted_code += " " + write_value(1);
             formatted_code += " == " + write_value(2);
             formatted_code += " -> " + write_addr(3);
-        //m_opcodes[position + 3] = get_value(1) == get_value(2) ? 1 : 0;
+            // m_opcodes[position + 3] = get_value(1) == get_value(2) ? 1 : 0;
             position += 4;
             break;
         case END:
@@ -207,17 +206,18 @@ public:
             break;
         default:
             codes[0] = 1;
-        // here is probably garbage, set to immediate to just print the value
+            // here is probably garbage, set to immediate to just print the value
             formatted_code += std::format("{}", get_value(0));
             position += 1;
             break;
         }
-        //formatted_code += "<br/>";
+        // formatted_code += "<br/>";
 
         return formatted_code;
     }
 
-    auto step() -> bool {
+    auto step() -> bool
+    {
 
         if (m_state == INPUT) {
             m_opcodes[position + 1] = m_input;
@@ -264,14 +264,16 @@ public:
         return true;
     }
 
-private:
+    void set_color_palette(ColorPalette const &color_palette) { m_color_palette = color_palette; }
+
+  private:
     std::vector<CodeType> m_opcodes = {};
-    CodeType m_input                = -1;
-    CodeType m_output               = -1;
-    size_t position                 = 0;
-    std::array<uint8_t, 5> codes    = {0};
-    State m_state                   = IDLE;
+    CodeType m_input = -1;
+    CodeType m_output = -1;
+    size_t position = 0;
+    std::array<uint8_t, 5> codes = { 0 };
+    State m_state = IDLE;
+    ColorPalette m_color_palette = {};
 };
 
-
-#endif //INTCOMPUTER_H
+#endif// INTCOMPUTER_H

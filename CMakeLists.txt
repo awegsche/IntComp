@@ -20,16 +20,26 @@ qt_standard_project_setup()
 
 include_directories(${Qt6Widgets_INCLUDE_DIRS})
 include_directories(${Qt6Core_INCLUDE_DIRS})
-# ---- QT related setup ----------------------------------------------------------------------------
+
+# ---- Testing -------------------------------------------------------------------------------------
 include(FetchContent)
 FetchContent_Declare(
-        googletest
-        URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
-)
+    googletest
+    URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
+    )
 # For Windows: Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
+# ---- Dependencies --------------------------------------------------------------------------------
+include(FetchContent)
+FetchContent_Declare(
+    fmttools
+    GIT_REPOSITORY https://github.com/awegsche/fmttools
+    GIT_TAG 0.1.2
+    )
+
+FetchContent_MakeAvailable(fmttools)
 
 # ---- sources -------------------------------------------------------------------------------------
 set(PROJECT_SOURCES
@@ -49,20 +59,28 @@ target_link_libraries(
         qintcomp
         Qt6::Core
         Qt6::Widgets
+        fmttools
 )
 
 #qt_finalize_executable(qintcomp)
 # ---- testing -------------------------------------------------------------------------------------
 enable_testing()
 
+include(GoogleTest)
+
 add_executable(intcomp_test
         tests/test_intcomp.cpp
 )
 
-include(GoogleTest)
+target_link_libraries(
+        intcomp_test
+        Qt6::Core
+        Qt6::Widgets
+        gtest_main
+        fmttools
+)
+
 gtest_discover_tests(intcomp_test)
-
-
 
 if (WIN32 AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
     set(DEBUG_SUFFIX)
