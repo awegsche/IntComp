@@ -5,9 +5,10 @@
 #ifndef EDITOR_H
 #define EDITOR_H
 
-#include "core/ColorPalette.h"
 #include <QMainWindow>
 
+#include "core/ColorPalette.h"
+#include "core/IntComputer.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui {
@@ -26,11 +27,16 @@ class Editor : public QMainWindow
 
   private:
     Ui::Editor *ui;
-    ColorPalette m_palette;
+    ColorPalette palette_;
+    IntComputer computer_;
 
     void input_text();
+    void step_program();
+
+  public slots:
     void compile();
     void run();
+    void step();
 };
 
 

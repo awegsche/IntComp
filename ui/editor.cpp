@@ -27,26 +27,69 @@ Editor::Editor(QWidget *parent) : QMainWindow(parent), ui(new Ui::Editor)
     qDebug() << palette.text().color().name();
 
 
-    m_palette.text = palette.text().color().name().toStdString();
-    m_palette.highlighted_background = palette.highlight().color().name().toStdString();
+    palette_.text = palette.text().color().name().toStdString();
+    palette_.highlighted_background = palette.highlight().color().name().toStdString();
 
-    qDebug() << QString::fromStdString(std::format("{}", m_palette));
+    qDebug() << QString::fromStdString(std::format("{}", palette_));
     // connect(this, ui.
     // connect(ui->textInput, &QTextBrowser::textChanged,
     // this, &Editor::input_text);
 
     connect(ui->buttonCompile, &QPushButton::clicked, this, &Editor::compile);
+    connect(ui->buttonRun, &QPushButton::clicked, this, &Editor::run);
+    connect(ui->buttonStep, &QPushButton::clicked, this, &Editor::step);
 }
 
 Editor::~Editor() { delete ui; }
 
 void Editor::input_text() { ui->codeView->document()->setHtml(ui->textInput->document()->toRawText()); }
 
-void Editor::compile()
+void Editor::step_program()
 {
-    IntComputer program{ ui->textInput->document()->toRawText().toStdString() };
+    if (computer_.get_state() == State::INPUT) {
+        const CodeType input = ui->terminalIn->text().toLongLong();
+        ui->terminalIn->setText("");
+        computer_.set_input(input);
+    }
+    computer_.step();
 
-    ui->codeView->document()->setHtml(QString::fromStdString(program.print()));
+    switch (computer_.get_state()) {
+    case State::OUTPUT:
+        ui->terminalOut->append(QString::number(computer_.get_output()));
+        break;
+    case State::ATEND:
+        ui->terminalOut->append("END");
+        break;
+    case State::INPUT:
+        ui->terminalOut->append(">");
+        break;
+    case State::RUN:
+        // this is the default case, just continue
+        break;
+    default:
+        ui->terminalOut->append("ERROR");
+        break;
+    }
 }
 
-void Editor::run() {}
+void Editor::compile()
+{
+    computer_ = IntComputer{ ui->textInput->document()->toRawText().toStdString() };
+    computer_.set_color_palette(palette_);
+
+    ui->terminalOut->setText("");
+    ui->codeView->document()->setHtml(QString::fromStdString(computer_.print()));
+}
+
+void Editor::run()
+{
+    do {
+        step_program();
+    } while (computer_.get_state() != State::INPUT && computer_.get_state() != State::ATEND);
+}
+
+void Editor::step()
+{
+    step_program();
+    ui->codeView->document()->setHtml(QString::fromStdString(computer_.print()));
+}

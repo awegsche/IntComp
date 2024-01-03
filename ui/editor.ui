@@ -52,9 +52,16 @@
            </widget>
           </item>
           <item>
-           <widget class="QPushButton" name="pushButton">
+           <widget class="QPushButton" name="buttonRun">
             <property name="text">
              <string>Run</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="buttonStep">
+            <property name="text">
+             <string>Step</string>
             </property>
            </widget>
           </item>

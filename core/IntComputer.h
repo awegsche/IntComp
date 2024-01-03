@@ -14,31 +14,39 @@
 
 #include "ColorPalette.h"
 
+
+#include <qtypes.h>
+
 using CodeType = int64_t;
+
+enum class OpCode {
+    ADD = 1,
+    MUL,
+    INP,
+    OUT,
+    JTR,
+    JFA,
+    LES,
+    EQU,
+    END = 99,
+};
+
+enum class State {
+    IDLE,
+    RUN,
+    INPUT,
+    OUTPUT,
+    ATEND,
+};
+
+enum class Mode { POSITION = 0, IMMEDIATE, RELATIVE };
+
 
 class IntComputer
 {
 
   public:
-    enum OpCode {
-        ADD = 1,
-        MUL,
-        INP,
-        OUT,
-        JTR,
-        JFA,
-        LES,
-        EQU,
-        END = 99,
-    };
-
-    enum State {
-        IDLE,
-        RUN,
-        INPUT,
-        OUTPUT,
-        ATEND,
-    };
+    IntComputer() : m_opcodes({ static_cast<CodeType>(OpCode::END) }) {}
 
     IntComputer(std::string const &code)
     {
@@ -76,11 +84,13 @@ class IntComputer
 
     auto write_value(uint8_t offset) const -> std::string
     {
-        switch (codes[offset]) {
-        case 0:// position
+        switch (static_cast<Mode>(codes[offset])) {
+        case Mode::POSITION:// position
             return std::format("@{}", m_opcodes[position + offset]);
-        case 1:// immediate
+        case Mode::IMMEDIATE:// immediate
             return std::format("<font color=\"yellow\">{}</font>", m_opcodes[position + offset]);
+        case Mode::RELATIVE:// immediate
+            return std::format("<font color=\"orange\">${}</font>", m_opcodes[position + offset]);
         default:
             throw std::runtime_error("unknown mode");
         }
@@ -88,39 +98,60 @@ class IntComputer
 
     auto get_value(uint8_t offset) -> CodeType &
     {
-        switch (codes[offset]) {
-        case 0:// position
+        switch (static_cast<Mode>(codes[offset])) {
+        case Mode::POSITION:
             return m_opcodes[m_opcodes[position + offset]];
-        case 1:// immediate
+        case Mode::IMMEDIATE:
             return m_opcodes[position + offset];
+        case Mode::RELATIVE:
+            return m_opcodes[relative_position + offset];
         default:
             throw std::runtime_error("unknown mode");
         }
     }
 
-    auto run()
+    auto get_address(uint8_t offset) -> CodeType &
     {
-        m_state = RUN;
+        switch (static_cast<Mode>(codes[offset])) {
+        case Mode::POSITION:
+            return m_opcodes[position + offset];
+        case Mode::IMMEDIATE:
+            return m_opcodes[position + offset];
+        case Mode::RELATIVE:
+            return m_opcodes[relative_position + offset];
+        default:
+            throw std::runtime_error("unknown mode");
+        }
+    }
 
+    /// \brief runs the program until
+    ///  - it hits an END opcode
+    ///  - it requires input
+    ///  - it prints output (?)
+    ///
+    void run()
+    {
         do {
             step();
-        } while (m_state == RUN);
+        } while (m_state == State::RUN);
     }
 
     auto print() -> std::string
     {
         auto const start = position;
+        position = 0;
         auto const start_state = m_state;
 
         std::string formatted_string{};
-        while (m_state != ATEND && position < m_opcodes.size()) {
+        while (m_state != State::ATEND && position < m_opcodes.size()) {
             if (position == start) {
-                formatted_string += "<span style = \"background-color:#202040\">";
+                formatted_string += std::format(
+                    "<span style = \"background-color:{};display:block\">", m_color_palette.highlighted_background);
             } else {
                 formatted_string += "<span>";
             }
             formatted_string += print_step();
-            formatted_string += "</span><br/>";
+            formatted_string += "<br/></span>";
         }
         while (position < m_opcodes.size()) {
             codes[0] = 1;
@@ -142,47 +173,46 @@ class IntComputer
 
         formatted_code += std::format("<font color=\"#808080\">{:03} | </font>", position);
 
-        switch (codes[0]) {
-        case ADD:
+        switch (static_cast<OpCode>(codes[0])) {
+        case OpCode::ADD:
             formatted_code += "<font color=\"#00a000\">ADD</font>";
             formatted_code += " " + write_value(1);
             formatted_code += " " + write_value(2);
             formatted_code += " -> " + write_addr(3);
             position += 4;
             break;
-        case MUL:
+        case OpCode::MUL:
             formatted_code += "<font color=\"#00a000\">MUL</font>";
             formatted_code += " " + write_value(1);
             formatted_code += " " + write_value(2);
             formatted_code += " -> " + write_addr(3);
             position += 4;
             break;
-        case INP:
+        case OpCode::INP:
             formatted_code += "<font color=\"#00a000\">INP</font>";
             formatted_code += " -> " + write_addr(1);
-            formatted_code += " -> " + write_addr(1);
             position += 2;
-            m_state = INPUT;
+            m_state = State::INPUT;
             break;
-        case OUT:
+        case OpCode::OUT:
             formatted_code += "<font color=\"#00a000\">OUT</font>";
             formatted_code += " -> " + write_addr(1);
             position += 2;
-            m_state = OUTPUT;
+            m_state = State::OUTPUT;
             break;
-        case JTR:
+        case OpCode::JTR:
             formatted_code += "<font color=\"#00a000\">JTR</font>";
             formatted_code += " " + write_value(1);
             formatted_code += " -> " + write_value(2);
             position += 3;
             break;
-        case JFA:
+        case OpCode::JFA:
             formatted_code += "<font color=\"#00a000\">JFA</font>";
             formatted_code += " " + write_value(1);
             formatted_code += " -> " + write_value(2);
             position += 3;
             break;
-        case LES:
+        case OpCode::LES:
             formatted_code += "<font color=\"#00a000\">LES</font>";
             formatted_code += " " + write_value(1);
             formatted_code += " < " + write_value(2);
@@ -191,7 +221,7 @@ class IntComputer
             // m_opcodes[position + 3] = get_value(1) < get_value(2) ? 1 : 0;
             position += 4;
             break;
-        case EQU:
+        case OpCode::EQU:
             formatted_code += "<font color=\"#00a000\">EQU</font>";
             formatted_code += " " + write_value(1);
             formatted_code += " == " + write_value(2);
@@ -199,10 +229,10 @@ class IntComputer
             // m_opcodes[position + 3] = get_value(1) == get_value(2) ? 1 : 0;
             position += 4;
             break;
-        case END:
+        case OpCode::END:
             formatted_code += "<font color=\"#a00000\">END</font>";
             position += 1;
-            m_state = ATEND;
+            m_state = State::ATEND;
             break;
         default:
             codes[0] = 1;
@@ -219,46 +249,52 @@ class IntComputer
     auto step() -> bool
     {
 
-        if (m_state == INPUT) {
-            m_opcodes[position + 1] = m_input;
+        if (m_state == State::INPUT) {
+            m_opcodes[get_address(1)] = m_input;
             position += 2;
+            m_state = State::RUN;
             return true;
         }
 
         get_opcode();
 
-        switch (codes[0]) {
-        case ADD:
+        switch (static_cast<OpCode>(codes[0])) {
+        case OpCode::ADD:
             m_opcodes[position + 3] = get_value(1) + get_value(2);
             position += 4;
             break;
-        case MUL:
+        case OpCode::MUL:
             m_opcodes[position + 3] = get_value(1) * get_value(2);
             position += 4;
             break;
-        case INP:
-            m_state = INPUT;
+        case OpCode::INP:
+            m_state = State::INPUT;
             return false;
-        case OUT:
+        case OpCode::OUT:
             m_output = get_value(1);
-            m_state = OUTPUT;
+            m_state = State::OUTPUT;
+            position += 2;
             return false;
-        case JTR:
+        case OpCode::JTR:
             position = get_value(1) != 0 ? get_value(2) : position + 3;
             break;
-        case JFA:
+        case OpCode::JFA:
             position = get_value(1) == 0 ? get_value(2) : position + 3;
             break;
-        case LES:
-            m_opcodes[position + 3] = get_value(1) < get_value(2) ? 1 : 0;
+        case OpCode::LES: {
+            const auto pos = get_address(3);
+            m_opcodes[pos] = get_value(1) < get_value(2) ? 1 : 0;
             position += 4;
             break;
-        case EQU:
-            m_opcodes[position + 3] = get_value(1) == get_value(2) ? 1 : 0;
+        }
+        case OpCode::EQU: {
+            const auto pos = get_address(3);
+            m_opcodes[pos] = get_value(1) == get_value(2) ? 1 : 0;
             position += 4;
             break;
-        case END:
-            m_state = ATEND;
+        }
+        case OpCode::END:
+            m_state = State::ATEND;
             return false;
         }
         return true;
@@ -266,13 +302,20 @@ class IntComputer
 
     void set_color_palette(ColorPalette const &color_palette) { m_color_palette = color_palette; }
 
+    void set_input(CodeType input) { m_input = input; }
+
+    CodeType get_output() const { return m_output; }
+
+    State get_state() const { return m_state; }
+
   private:
     std::vector<CodeType> m_opcodes = {};
     CodeType m_input = -1;
     CodeType m_output = -1;
     size_t position = 0;
+    size_t relative_position = 0;
     std::array<uint8_t, 5> codes = { 0 };
-    State m_state = IDLE;
+    State m_state = State::RUN;
     ColorPalette m_color_palette = {};
 };
 
