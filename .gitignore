@@ -1,0 +1,11 @@
+# IDE caches
+.cache
+.idea
+
+# build output
+*build*
+compile_commands.json
+
+# custom run scripts
+*.ps1
+*.sh
