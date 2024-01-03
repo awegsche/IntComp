@@ -66,6 +66,12 @@ void Editor::step_program()
     case State::RUN:
         // this is the default case, just continue
         break;
+    case State::OUT_OF_MEM:
+        ui->terminalOut->append("OUT_OF_MEM");
+        break;
+    case State::INVALID_ACCESS:
+        ui->terminalOut->append("INVALID ACCESS");
+        break;
     default:
         ui->terminalOut->append("ERROR");
         break;
@@ -85,7 +91,7 @@ void Editor::run()
 {
     do {
         step_program();
-    } while (computer_.get_state() != State::INPUT && computer_.get_state() != State::ATEND);
+    } while (computer_.get_state() == State::RUN || computer_.get_state() == State::OUTPUT);
 }
 
 void Editor::step()

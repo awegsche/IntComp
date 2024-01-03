@@ -19,6 +19,8 @@
 
 using CodeType = int64_t;
 
+constexpr size_t MEM_SIZE = 2048;
+
 enum class OpCode {
     ADD = 1,
     MUL,
@@ -28,6 +30,7 @@ enum class OpCode {
     JFA,
     LES,
     EQU,
+    REL,
     END = 99,
 };
 
@@ -37,6 +40,8 @@ enum class State {
     INPUT,
     OUTPUT,
     ATEND,
+    OUT_OF_MEM,
+    INVALID_ACCESS,
 };
 
 enum class Mode { POSITION = 0, IMMEDIATE, RELATIVE };
@@ -46,27 +51,35 @@ class IntComputer
 {
 
   public:
-    IntComputer() : m_opcodes({ static_cast<CodeType>(OpCode::END) }) {}
+    IntComputer() noexcept : m_opcodes({ static_cast<CodeType>(OpCode::END) }) {}
 
-    IntComputer(std::string const &code)
+    explicit IntComputer(std::string const &code) noexcept
     {
+        m_opcodes.resize(MEM_SIZE);
         auto pos = code.begin();
+        auto idx = 0;
 
         while (true) {
             auto until = std::find(pos, code.end(), ',');
 
             std::string_view v(pos, until);
-            int value;
+            CodeType value = 0;
             std::from_chars(v.data(), v.data() + v.length(), value);
 
-            m_opcodes.push_back(value);
+            m_opcodes[idx] = value;
 
             if (until == code.end()) break;
             pos = until + 1;
+            ++idx;
+
+            if (idx >= MEM_SIZE) {
+                m_state = State::OUT_OF_MEM;
+                return;
+            }
         }
     }
 
-    auto opcodes() const -> std::vector<CodeType> const & { return m_opcodes; }
+    [[nodiscard]] auto opcodes() const -> std::vector<CodeType> const & { return m_opcodes; }
 
     auto get_opcode()
     {
@@ -80,7 +93,19 @@ class IntComputer
         }
     }
 
-    auto write_addr(uint8_t offset) const -> std::string { return std::format("@{}", m_opcodes[position + offset]); }
+    auto write_addr(uint8_t offset) const -> std::string
+    {
+        switch (static_cast<Mode>(codes[offset])) {
+        case Mode::POSITION:// position
+            return std::format("@{}", m_opcodes[position + offset]);
+        case Mode::IMMEDIATE:// immediate
+            return std::format("@{}", position + offset);
+        case Mode::RELATIVE:// immediate
+            return std::format("<font color=\"orange\">${}</font>", m_opcodes[position+offset]);
+        default:
+            throw std::runtime_error("unknown mode");
+        }
+    }
 
     auto write_value(uint8_t offset) const -> std::string
     {
@@ -90,7 +115,7 @@ class IntComputer
         case Mode::IMMEDIATE:// immediate
             return std::format("<font color=\"yellow\">{}</font>", m_opcodes[position + offset]);
         case Mode::RELATIVE:// immediate
-            return std::format("<font color=\"orange\">${}</font>", m_opcodes[position + offset]);
+            return std::format("<font color=\"orange\">${}</font>", relative_position);
         default:
             throw std::runtime_error("unknown mode");
         }
@@ -98,19 +123,28 @@ class IntComputer
 
     auto get_value(uint8_t offset) -> CodeType &
     {
+        CodeType pos = 0;
         switch (static_cast<Mode>(codes[offset])) {
         case Mode::POSITION:
-            return m_opcodes[m_opcodes[position + offset]];
+            pos = m_opcodes[position + offset];
+            break;
         case Mode::IMMEDIATE:
-            return m_opcodes[position + offset];
+            pos = position + offset;
+            break;
         case Mode::RELATIVE:
-            return m_opcodes[relative_position + offset];
+            pos = relative_position + m_opcodes[position + offset];
+            break;
         default:
             throw std::runtime_error("unknown mode");
+            break;
         }
+
+        if (pos >= MEM_SIZE) { m_state = State::INVALID_ACCESS; }
+
+        return m_opcodes[pos];
     }
 
-    auto get_address(uint8_t offset) -> CodeType &
+    auto get_address(uint8_t offset) const -> CodeType
     {
         switch (static_cast<Mode>(codes[offset])) {
         case Mode::POSITION:
@@ -118,7 +152,7 @@ class IntComputer
         case Mode::IMMEDIATE:
             return m_opcodes[position + offset];
         case Mode::RELATIVE:
-            return m_opcodes[relative_position + offset];
+            return relative_position + m_opcodes[position + offset];
         default:
             throw std::runtime_error("unknown mode");
         }
@@ -153,12 +187,16 @@ class IntComputer
             formatted_string += print_step();
             formatted_string += "<br/></span>";
         }
-        while (position < m_opcodes.size()) {
+
+        size_t mem_count = 0;
+
+        while (position < m_opcodes.size() && mem_count < 32) {
             codes[0] = 1;
             // here is probably garbage, set to immediate to just print the value
             formatted_string += std::format("<font color=\"#808080\">{:03d} | </font>", position);
             formatted_string += std::format("{}<br/>", get_value(0));
-            position += 1;
+            ++position;
+            ++mem_count;
         }
         position = start;
         m_state = start_state;
@@ -196,7 +234,7 @@ class IntComputer
             break;
         case OpCode::OUT:
             formatted_code += "<font color=\"#00a000\">OUT</font>";
-            formatted_code += " -> " + write_addr(1);
+            formatted_code += " -> " + write_value(1);
             position += 2;
             m_state = State::OUTPUT;
             break;
@@ -229,6 +267,11 @@ class IntComputer
             // m_opcodes[position + 3] = get_value(1) == get_value(2) ? 1 : 0;
             position += 4;
             break;
+        case OpCode::REL:
+            formatted_code += "<font color=\"#00a000\">REL</font>";
+            formatted_code += " " + write_value(1);
+            position += 2;
+            break;
         case OpCode::END:
             formatted_code += "<font color=\"#a00000\">END</font>";
             position += 1;
@@ -249,22 +292,27 @@ class IntComputer
     auto step() -> bool
     {
 
-        if (m_state == State::INPUT) {
+        switch (m_state) {
+        case State::INPUT: {
             m_opcodes[get_address(1)] = m_input;
             position += 2;
             m_state = State::RUN;
             return true;
+        }
+        case State::OUTPUT:
+            m_state = State::RUN;
+            break;
         }
 
         get_opcode();
 
         switch (static_cast<OpCode>(codes[0])) {
         case OpCode::ADD:
-            m_opcodes[position + 3] = get_value(1) + get_value(2);
+            get_value(3) = get_value(1) + get_value(2);
             position += 4;
             break;
         case OpCode::MUL:
-            m_opcodes[position + 3] = get_value(1) * get_value(2);
+            get_value(3) = get_value(1) * get_value(2);
             position += 4;
             break;
         case OpCode::INP:
@@ -293,6 +341,11 @@ class IntComputer
             position += 4;
             break;
         }
+        case OpCode::REL: {
+            relative_position += get_value(1);
+            position += 2;
+            break;
+        }
         case OpCode::END:
             m_state = State::ATEND;
             return false;
@@ -309,7 +362,7 @@ class IntComputer
     State get_state() const { return m_state; }
 
   private:
-    std::vector<CodeType> m_opcodes = {};
+    std::vector<CodeType> m_opcodes = std::vector<CodeType>{ MEM_SIZE, 0 };
     CodeType m_input = -1;
     CodeType m_output = -1;
     size_t position = 0;
